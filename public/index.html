@@ -44,10 +44,15 @@ if (inDiscord && DISCORD_CLIENT_ID) {
 }
 const send = o => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
 function connect() {
+  err = 'Verbinde mit dem Server …'; draw();
   ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + (inDiscord ? '/.proxy' : '') + '/ws');
   ws.onopen = () => send({ t: 'join', room, name });
   ws.onmessage = e => { const m = JSON.parse(e.data); if (m.err) { err = m.err; S = null; } else { S = m; err = ''; } draw(); };
-  ws.onclose = () => { if (S) { err = 'Verbindung verloren. Seite neu laden.'; S = null; draw(); } };
+  ws.onerror = () => { if (!S) { err = 'Verbindung zum Server fehlgeschlagen. Warte eine Minute und versuche es nochmal.'; draw(); } };
+  ws.onclose = () => {
+    if (S) { err = 'Verbindung verloren. Seite neu laden.'; S = null; draw(); }
+    else if (err.startsWith('Verbinde') || err.startsWith('Verbindung zum')) { err = 'Der Server hat die Verbindung beendet. Lade die Seite neu und versuche es nochmal.'; draw(); }
+  };
 }
 const hearts = n => n > 0 ? '<span class="hr">' + '♥'.repeat(n) + '</span>' : '☠';
 const chips = () => '<div class="chips">' + S.players.map(p => `<span class="chip${p.h ? '' : ' out'}${p.on ? '' : ' off'}">${esc(p.name)} ${hearts(p.h)}</span>`).join('') + '</div>';
