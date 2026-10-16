@@ -24,6 +24,10 @@ button:focus-visible,input:focus-visible{outline:3px solid var(--ink);outline-of
 .hr{color:var(--heart)}.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .big{font-size:2rem;text-align:center;margin:8px 0}
 .err{color:var(--heart)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px}
+.tile{background:var(--panel);border:2px solid var(--line);color:var(--ink);border-radius:18px;padding:10px 6px;margin:0;text-align:center;width:auto}
+.tile .em{font-size:2.4rem;display:block;line-height:1.1}.tile small{display:block;color:var(--muted);margin-top:2px}
+.tile.sel{border-color:var(--btn);background:color-mix(in srgb,var(--btn) 18%,var(--panel))}
 </style>
 </head>
 <body>
@@ -55,8 +59,11 @@ function connect() {
   };
 }
 const hearts = n => n > 0 ? '<span class="hr">' + '♥'.repeat(n) + '</span>' : '☠';
-const chips = () => '<div class="chips">' + S.players.map(p => `<span class="chip${p.h ? '' : ' out'}${p.on ? '' : ' off'}">${esc(p.name)} ${p.id === S.host ? '🎤' : hearts(p.h)}</span>`).join('') + '</div>';
-const askedCard = () => { const a = S.players.find(p => p.id === S.asked); return a ? `<div class="card"><p style="margin:0">Die Frage geht an</p><div class="big">${a.id === S.you ? 'Du! 🎯' : esc(a.name)}</div></div>` : ''; };
+const AN = { '🐼': 'Panda', '🐨': 'Koala', '🦊': 'Fuchs', '🐯': 'Tiger', '🦁': 'Löwe', '🐸': 'Frosch', '🐵': 'Affe', '🐰': 'Hase', '🐶': 'Hund', '🐱': 'Katze', '🐷': 'Schwein', '🐮': 'Kuh', '🐧': 'Pinguin', '🐙': 'Krake', '🐢': 'Schildkröte', '🦉': 'Eule' };
+const av = p => (p && p.animal ? p.animal + ' ' : '');
+const avn = p => av(p) + esc(p.name);
+const chips = () => '<div class="chips">' + S.players.map(p => `<span class="chip${p.h ? '' : ' out'}${p.on ? '' : ' off'}">${avn(p)} ${p.id === S.host ? '🎤' : hearts(p.h)}</span>`).join('') + '</div>';
+const askedCard = () => { const a = S.players.find(p => p.id === S.asked); return a ? `<div class="card"><p style="margin:0">Die Frage geht an</p><div class="big">${av(a)}${a.id === S.you ? 'Du! 🎯' : esc(a.name)}</div></div>` : ''; };
 const btn = (id, label, cls = '') => `<button id="${id}" class="${cls}">${label}</button>`;
 const on = (id, f) => { const e = document.getElementById(id); if (e) e.onclick = f; };
 const act = (id, t, extra) => on(id, () => send({ t, ...extra }));
@@ -76,31 +83,34 @@ function draw() {
   const others = S.players.filter(p => p.h > 0 && p.id !== S.you && p.id !== S.host);
   let h = '';
   if (S.ph === 'lobby') {
-    h = `<h2>Warteraum „${esc(room)}“</h2>${chips()}<p>${host ? 'Du bist Moderator und spielst nicht mit. Starte, wenn mindestens 2 Mitspieler da sind.' : 'Warte, bis der Moderator startet.'}</p>${host ? btn('st', 'Spiel starten') : ''}`;
+    const taken = {}; S.players.forEach(p => { if (p.animal) taken[p.animal] = p.id; });
+    const ready = S.players.length >= 3 && S.players.every(p => p.animal);
+    h = `<h2>Warteraum „${esc(room)}“</h2>${chips()}<div class="card"><p style="margin-top:0">Wähle dein Tier:</p><div class="grid">${Object.keys(AN).map(a => `<button class="tile ${me.animal === a ? 'sel' : ''}" data-a="${a}"${taken[a] && taken[a] !== S.you ? ' disabled' : ''}><span class="em">${a}</span><small>${AN[a]}</small></button>`).join('')}</div></div><p>${host ? 'Du bist Moderator und spielst nicht mit. Starte, wenn mindestens 2 Mitspieler da sind und alle ein Tier haben.' : 'Warte, bis der Moderator startet.'}</p>${host ? btn('st', 'Spiel starten').replace('<button', ready ? '<button' : '<button disabled') : ''}`;
   } else if (S.ph === 'round') {
     h = `<h2>Fragerunde</h2>${chips()}${askedCard()}<div class="card"><div class="row"><span>Zeit</span><b id="tm" style="font-size:2rem"></b></div></div><div class="card"><div class="q">${esc(S.q)}</div>${S.a ? `<div class="a">${esc(S.a)}${host && !S.show ? ' (nur du siehst das)' : ''}</div>` : ''}</div>${host ? btn('rv', 'Antwort für alle zeigen', 'alt') + btn('nx', 'Nächste Frage') + btn('tv', 'Jetzt abstimmen', 'alt') : '<p>Nur wer dran ist, antwortet laut im Call. Der Moderator geht durch die Fragen.</p>'}`;
   } else if (S.ph === 'vote') {
     const waiting = S.players.filter(p => p.h > 0 && p.on && !p.voted && p.id !== S.host).map(p => esc(p.name)).join(', ');
-    h = `<h2>Abstimmung</h2>${chips()}` + (!host && me.h > 0 ? (S.myVote ? `<div class="card"><p>Deine Stimme ist abgegeben. Es fehlen noch: ${waiting || 'niemand'}</p></div>` : '<div class="card"><p>Wer war gerade der Dümmste? Geheim.</p></div>' + others.map(p => `<button data-v="${p.id}">${esc(p.name)}</button>`).join('')) : '<p>' + (host ? 'Du moderierst und stimmst nicht ab.' : 'Du bist raus und schaust zu.') + '</p>');
+    h = `<h2>Abstimmung</h2>${chips()}` + (!host && me.h > 0 ? (S.myVote ? `<div class="card"><p>Deine Stimme ist abgegeben. Es fehlen noch: ${waiting || 'niemand'}</p></div>` : '<div class="card"><p>Wer war gerade der Dümmste? Geheim.</p></div>' + others.map(p => `<button data-v="${p.id}">${avn(p)}</button>`).join('')) : '<p>' + (host ? 'Du moderierst und stimmst nicht ab.' : 'Du bist raus und schaust zu.') + '</p>');
   } else if (S.ph === 'result') {
     const r = S.res;
-    h = `<h2>Ergebnis</h2><div class="card">${S.players.filter(p => r.counts[p.id] !== undefined).map(p => `<div class="row"><span>${esc(p.name)}</span><span>${r.counts[p.id]} Stimmen</span></div>`).join('')}</div><div class="card"><div class="big">${esc(r.loser)} verliert ein Herz</div><p style="text-align:center">${r.tie ? 'Gleichstand, der Zufall hat entschieden. ' : ''}${r.out ? 'Ausgeschieden: Der Dümmste fliegt!' : ''}</p></div>${chips()}${host ? btn('ct', 'Weiter') : ''}`;
+    h = `<h2>Ergebnis</h2><div class="card">${S.players.filter(p => r.counts[p.id] !== undefined).map(p => `<div class="row"><span>${avn(p)}</span><span>${r.counts[p.id]} Stimmen</span></div>`).join('')}</div><div class="card"><div class="big">${esc(r.loser)} verliert ein Herz</div><p style="text-align:center">${r.tie ? 'Gleichstand, der Zufall hat entschieden. ' : ''}${r.out ? 'Ausgeschieden: Der Dümmste fliegt!' : ''}</p></div>${chips()}${host ? btn('ct', 'Weiter') : ''}`;
   } else if (S.ph === 'finale') {
-    const f = S.fin, pn = f.pl[f.turn].name;
+    const f = S.fin, pn = av(f.pl[f.turn]) + f.pl[f.turn].name;
     if (f.wait) {
-      h = `<h2>Finale</h2><div class="card"><div class="big">${esc(f.pl[0].name)} ist fertig</div><p style="text-align:center">Als Nächstes: ${esc(f.pl[1].name)}</p></div>` + (host ? btn('ct', 'Nächster Spieler startet') : '<p>Warte auf den Moderator.</p>');
+      h = `<h2>Finale</h2><div class="card"><div class="big">${avn(f.pl[0])} ist fertig</div><p style="text-align:center">Als Nächstes: ${avn(f.pl[1])}</p></div>` + (host ? btn('ct', 'Nächster Spieler startet') : '<p>Warte auf den Moderator.</p>');
     } else {
-      h = `<h2>Finale: ${esc(pn)} ist dran</h2><div class="card"><div class="row"><span>${f.len === 1 ? 'Stechen' : 'Frage ' + (f.n + 1) + ' von ' + f.len}</span>${host ? `<span>${esc(f.pl[0].name)} ${f.s[0]} | ${esc(f.pl[1].name)} ${f.s[1]}</span>` : ''}</div></div><div class="card"><div class="q">${S.q === null ? 'Du bist gleich dran. Bitte jetzt nicht zuhören (Ton aus)!' : esc(S.q)}</div>${S.a ? `<div class="a">${esc(S.a)} (nur du siehst das)</div>` : ''}</div>` +
+      h = `<h2>Finale: ${esc(pn)} ist dran</h2><div class="card"><div class="row"><span>${f.len === 1 ? 'Stechen' : 'Frage ' + (f.n + 1) + ' von ' + f.len}</span>${host ? `<span>${avn(f.pl[0])} ${f.s[0]} | ${avn(f.pl[1])} ${f.s[1]}</span>` : ''}</div></div><div class="card"><div class="q">${S.q === null ? 'Du bist gleich dran. Bitte jetzt nicht zuhören (Ton aus)!' : esc(S.q)}</div>${S.a ? `<div class="a">${esc(S.a)} (nur du siehst das)</div>` : ''}</div>` +
         (host ? `<p>Hat ${esc(pn)} richtig geantwortet?</p>${btn('jr', 'Richtig')}${btn('jf', 'Falsch', 'alt')}` : '<p>Antwort laut im Call. Die Punkte kennt nur der Moderator.</p>');
     }
   } else if (S.ph === 'done') {
-    h = host ? `<h2>Beide fertig</h2><div class="card"><div class="row"><span>${esc(S.fin.pl[0].name)}</span><b>${S.fin.s[0]}</b></div><div class="row"><span>${esc(S.fin.pl[1].name)}</span><b>${S.fin.s[1]}</b></div></div>${btn('rz', 'Ergebnis für alle auflösen')}` : '<h2>Finale vorbei</h2><div class="card"><div class="big">Der Moderator löst gleich auf …</div></div>';
+    h = host ? `<h2>Beide fertig</h2><div class="card"><div class="row"><span>${avn(S.fin.pl[0])}</span><b>${S.fin.s[0]}</b></div><div class="row"><span>${avn(S.fin.pl[1])}</span><b>${S.fin.s[1]}</b></div></div>${btn('rz', 'Ergebnis für alle auflösen')}` : '<h2>Finale vorbei</h2><div class="card"><div class="big">Der Moderator löst gleich auf …</div></div>';
   } else if (S.ph === 'tie') {
     h = `<h2>Gleichstand!</h2><div class="card"><div class="big">${S.fin.s[0]} : ${S.fin.s[1]}</div></div>` + (host ? btn('tb', 'Stechen: je 1 Frage') : '<p>Der Moderator startet das Stechen.</p>');
   } else if (S.ph === 'end') {
-    h = `<h1>Gewonnen!</h1><div class="card"><div class="big">${esc(S.winner)}</div><p style="text-align:center">ist nicht der Dümmste.</p></div>${S.fin && S.fin.s ? '<p style="text-align:center">Endstand: ' + esc(S.fin.pl[0].name) + ' ' + S.fin.s[0] + ' : ' + S.fin.s[1] + ' ' + esc(S.fin.pl[1].name) + '</p>' : ''}${host ? btn('rs', 'Nochmal spielen') : ''}`;
+    h = `<h1>Gewonnen!</h1><div class="card"><div class="big">${esc(S.winner)}</div><p style="text-align:center">ist nicht der Dümmste.</p></div>${S.fin && S.fin.s ? '<p style="text-align:center">Endstand: ' + avn(S.fin.pl[0]) + ' ' + S.fin.s[0] + ' : ' + S.fin.s[1] + ' ' + avn(S.fin.pl[1]) + '</p>' : ''}${host ? btn('rs', 'Nochmal spielen') : ''}`;
   }
   $.innerHTML = h;
+  document.querySelectorAll('[data-a]').forEach(b => b.onclick = () => send({ t: 'avatar', animal: b.dataset.a }));
   act('st', 'start'); act('rv', 'reveal'); act('nx', 'next'); act('tv', 'toVote'); act('ct', 'cont'); act('rs', 'restart');
   act('rz', 'resolve'); act('tb', 'tiebreak'); on('jr', () => send({ t: 'judge', w: 1 })); on('jf', () => send({ t: 'judge', w: 0 }));
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => send({ t: 'vote', target: b.dataset.v }));

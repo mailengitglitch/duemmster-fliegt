@@ -4,6 +4,8 @@ const srv = http.createServer(app), wss = new WebSocketServer({ server: srv, pat
 
 const Q = require('./questions.js').concat(require('./questions2.js'));
 
+const ANIMALS = ['🐼', '🐨', '🦊', '🐯', '🦁', '🐸', '🐵', '🐰', '🐶', '🐱', '🐷', '🐮', '🐧', '🐙', '🐢', '🦉'];
+const tag = p => (p.animal ? p.animal + ' ' : '') + p.name;
 const rooms = {};
 const send = (ws, o) => ws && ws.readyState === 1 && ws.send(JSON.stringify(o));
 const getRoom = id => rooms[id] || (rooms[id] = { id, ph: 'lobby', P: {}, host: null, pool: [], votes: {}, fin: null, seq: [], cur: null });
@@ -21,7 +23,7 @@ function push(r) {
     const isHost = p.id === r.host;
     send(p.ws, {
       ph: r.ph, asked: r.ph === 'round' ? r.cur : null, you: p.id, host: r.host, show: r.show, endsAt: r.endsAt, res: r.res, winner: r.winner,
-      players: all.map(x => ({ id: x.id, name: x.name, h: x.h, on: !!x.ws, voted: x.id in r.votes })),
+      players: all.map(x => ({ id: x.id, name: x.name, animal: x.animal, h: x.h, on: !!x.ws, voted: x.id in r.votes })),
       q: r.ph === 'finale' && r.fin && !r.fin.wait && r.fin.turn === 0 && r.fin.pl[1].id === p.id ? null : r.q && r.q[0], a: r.q && (isHost || r.show) ? r.q[1] : null,
       myVote: r.votes[p.id] || null,
       fin: r.fin && { pl: r.fin.pl, turn: r.fin.turn, n: r.fin.n, len: r.fin.len, wait: r.fin.wait, s: (isHost || r.ph === 'end' || r.ph === 'tie') ? r.fin.s : null }
@@ -43,13 +45,13 @@ function checkVotes(r) {
   const tied = alive(r).filter(p => counts[p.id] === max);
   const loser = tied[Math.floor(Math.random() * tied.length)];
   loser.h--;
-  r.res = { counts, loser: loser.name, tie: tied.length > 1, out: loser.h === 0 };
+  r.res = { counts, loser: tag(loser), tie: tied.length > 1, out: loser.h === 0 };
   r.ph = 'result';
 }
 function startFinale(r) {
   const a = alive(r);
-  if (a.length < 2) { r.ph = 'end'; r.winner = a[0] ? a[0].name : '?'; return; }
-  r.fin = { pl: a.slice(0, 2).map(p => ({ id: p.id, name: p.name })), s: [0, 0], turn: 0, n: 0, len: 10, wait: false };
+  if (a.length < 2) { r.ph = 'end'; r.winner = a[0] ? tag(a[0]) : '?'; return; }
+  r.fin = { pl: a.slice(0, 2).map(p => ({ id: p.id, name: p.name, animal: p.animal })), s: [0, 0], turn: 0, n: 0, len: 10, wait: false };
   r.fin.qs = Array.from({ length: 10 }, () => nq(r));
   r.ph = 'finale'; r.q = r.fin.qs[0]; r.show = false;
 }
@@ -62,14 +64,15 @@ wss.on('connection', ws => {
       const room = getRoom(String(m.room || 'main').slice(0, 40));
       if (room.ph !== 'lobby') return send(ws, { err: 'Das Spiel in diesem Raum läuft schon.' });
       if (Object.keys(room.P).length >= 8) return send(ws, { err: 'Raum ist voll (max. 8).' });
-      r = room; r.P[id] = { id, name: String(m.name || 'Spieler').slice(0, 20), h: 3, ws };
+      r = room; r.P[id] = { id, name: String(m.name || 'Spieler').slice(0, 20), h: 3, ws, animal: null };
       r.seq.push(id);
       if (!r.host) r.host = id;
       return push(r);
     }
     if (!r) return;
     const host = id === r.host;
-    if (m.t === 'start' && host && r.ph === 'lobby' && Object.keys(r.P).length >= 3) alive(r).length === 2 ? startFinale(r) : startRound(r);
+    if (m.t === 'avatar' && r.ph === 'lobby' && ANIMALS.includes(m.animal) && !Object.values(r.P).some(p => p.animal === m.animal && p.id !== id)) r.P[id].animal = m.animal;
+    else if (m.t === 'start' && host && r.ph === 'lobby' && Object.keys(r.P).length >= 3 && Object.values(r.P).every(p => p.animal)) alive(r).length === 2 ? startFinale(r) : startRound(r);
     else if (m.t === 'reveal' && host) r.show = true;
     else if (m.t === 'next' && host && (r.ph === 'round' || r.ph === 'finale') && r.ph === 'round') { r.q = nq(r); r.show = false; nextAsked(r); }
     else if (m.t === 'toVote' && host && r.ph === 'round') toVote(r);
@@ -84,7 +87,7 @@ wss.on('connection', ws => {
     else if (m.t === 'cont' && host && r.ph === 'finale' && r.fin.wait) { r.fin.wait = false; r.fin.turn = 1; r.fin.n = 0; r.q = r.fin.qs[0]; r.show = false; }
     else if (m.t === 'resolve' && host && r.ph === 'done') {
       const f = r.fin;
-      if (f.s[0] === f.s[1]) r.ph = 'tie'; else { r.ph = 'end'; r.winner = f.pl[f.s[0] > f.s[1] ? 0 : 1].name; }
+      if (f.s[0] === f.s[1]) r.ph = 'tie'; else { r.ph = 'end'; r.winner = tag(f.pl[f.s[0] > f.s[1] ? 0 : 1]); }
     }
     else if (m.t === 'tiebreak' && host && r.ph === 'tie') {
       Object.assign(r.fin, { s: [0, 0], turn: 0, n: 0, len: 1, wait: false, qs: [nq(r)] }); r.ph = 'finale'; r.q = r.fin.qs[0]; r.show = false;
