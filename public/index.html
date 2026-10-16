@@ -64,7 +64,7 @@ const act = (id, t, extra) => on(id, () => send({ t, ...extra }));
 function draw() {
   clearInterval(tick);
   if (!S) {
-    $.innerHTML = `<h1>Der Dümmste fliegt</h1><p>Alle starten mit 3 Herzen. Fragen, dann wählt ihr den Dümmsten. Bei 2 Übrigen entscheiden 10 Fragen. Ideal mit Kameras im Discord-Call.</p><div class="card"><input id="nm" placeholder="Dein Name" maxlength="20" value="${esc(name)}"><input id="rm" placeholder="Raumcode (Freunde geben denselben ein)" value="${esc(room)}"${inDiscord ? ' disabled' : ''}>${btn('go', 'Beitreten')}<p class="err">${esc(err)}</p></div><p><a href="werbinich.html" style="color:var(--btn)">Anderes Spiel: „Wer bin ich?“ →</a></p>`;
+    $.innerHTML = `<h1>Der Dümmste fliegt</h1><p>Alle starten mit 3 Herzen. Fragen, dann wählt ihr den Dümmsten. Bei 2 Übrigen entscheiden 10 Fragen. Ideal mit Kameras im Discord-Call.</p><div class="card"><input id="nm" placeholder="Dein Name" maxlength="20" value="${esc(name)}"><input id="rm" placeholder="Raumcode (Freunde geben denselben ein)" value="${esc(room)}"${inDiscord ? ' disabled' : ''}>${btn('go', 'Beitreten')}<p class="err">${esc(err)}</p></div>`;
     on('go', () => {
       name = document.getElementById('nm').value.trim(); room = document.getElementById('rm').value.trim() || 'main';
       if (!name) { err = 'Bitte Namen eingeben.'; return draw(); }

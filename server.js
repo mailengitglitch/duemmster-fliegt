@@ -1,13 +1,6 @@
 const express = require('express'), http = require('http'), { WebSocketServer } = require('ws');
 const app = express(); app.use(express.static('public'));
-const srv = http.createServer(app);
-const wss = new WebSocketServer({ noServer: true }), wss2 = new WebSocketServer({ noServer: true });
-require('./werbinich.js')(wss2);
-srv.on('upgrade', (req, sock, head) => {
-  const p = req.url.split('?')[0], w = p === '/ws' ? wss : p === '/ws2' ? wss2 : null;
-  if (!w) return sock.destroy();
-  w.handleUpgrade(req, sock, head, ws => w.emit('connection', ws, req));
-});
+const srv = http.createServer(app), wss = new WebSocketServer({ server: srv, path: '/ws' });
 
 const Q = require('./questions.js').concat(require('./questions2.js'));
 
