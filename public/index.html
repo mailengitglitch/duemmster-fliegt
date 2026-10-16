@@ -55,7 +55,8 @@ function connect() {
   };
 }
 const hearts = n => n > 0 ? '<span class="hr">' + '♥'.repeat(n) + '</span>' : '☠';
-const chips = () => '<div class="chips">' + S.players.map(p => `<span class="chip${p.h ? '' : ' out'}${p.on ? '' : ' off'}">${esc(p.name)} ${hearts(p.h)}</span>`).join('') + '</div>';
+const chips = () => '<div class="chips">' + S.players.map(p => `<span class="chip${p.h ? '' : ' out'}${p.on ? '' : ' off'}">${esc(p.name)} ${p.id === S.host ? '🎤' : hearts(p.h)}</span>`).join('') + '</div>';
+const askedCard = () => { const a = S.players.find(p => p.id === S.asked); return a ? `<div class="card"><p style="margin:0">Die Frage geht an</p><div class="big">${a.id === S.you ? 'Du! 🎯' : esc(a.name)}</div></div>` : ''; };
 const btn = (id, label, cls = '') => `<button id="${id}" class="${cls}">${label}</button>`;
 const on = (id, f) => { const e = document.getElementById(id); if (e) e.onclick = f; };
 const act = (id, t, extra) => on(id, () => send({ t, ...extra }));
@@ -63,7 +64,7 @@ const act = (id, t, extra) => on(id, () => send({ t, ...extra }));
 function draw() {
   clearInterval(tick);
   if (!S) {
-    $.innerHTML = `<h1>Der Dümmste fliegt</h1><p>Alle starten mit 3 Herzen. Fragen, dann wählt ihr den Dümmsten. Bei 2 Übrigen entscheiden 10 Fragen. Ideal mit Kameras im Discord-Call.</p><div class="card"><input id="nm" placeholder="Dein Name" maxlength="20" value="${esc(name)}"><input id="rm" placeholder="Raumcode (Freunde geben denselben ein)" value="${esc(room)}"${inDiscord ? ' disabled' : ''}>${btn('go', 'Beitreten')}<p class="err">${esc(err)}</p></div>`;
+    $.innerHTML = `<h1>Der Dümmste fliegt</h1><p>Alle starten mit 3 Herzen. Fragen, dann wählt ihr den Dümmsten. Bei 2 Übrigen entscheiden 10 Fragen. Ideal mit Kameras im Discord-Call.</p><div class="card"><input id="nm" placeholder="Dein Name" maxlength="20" value="${esc(name)}"><input id="rm" placeholder="Raumcode (Freunde geben denselben ein)" value="${esc(room)}"${inDiscord ? ' disabled' : ''}>${btn('go', 'Beitreten')}<p class="err">${esc(err)}</p></div><p><a href="werbinich.html" style="color:var(--btn)">Anderes Spiel: „Wer bin ich?“ →</a></p>`;
     on('go', () => {
       name = document.getElementById('nm').value.trim(); room = document.getElementById('rm').value.trim() || 'main';
       if (!name) { err = 'Bitte Namen eingeben.'; return draw(); }
@@ -72,28 +73,36 @@ function draw() {
     return;
   }
   const host = S.you === S.host, me = S.players.find(p => p.id === S.you);
-  const others = S.players.filter(p => p.h > 0 && p.id !== S.you);
+  const others = S.players.filter(p => p.h > 0 && p.id !== S.you && p.id !== S.host);
   let h = '';
   if (S.ph === 'lobby') {
-    h = `<h2>Warteraum „${esc(room)}“</h2>${chips()}<p>${host ? 'Du bist Moderator. Starte, wenn alle da sind (mind. 2).' : 'Warte, bis der Moderator startet.'}</p>${host ? btn('st', 'Spiel starten') : ''}`;
+    h = `<h2>Warteraum „${esc(room)}“</h2>${chips()}<p>${host ? 'Du bist Moderator und spielst nicht mit. Starte, wenn mindestens 2 Mitspieler da sind.' : 'Warte, bis der Moderator startet.'}</p>${host ? btn('st', 'Spiel starten') : ''}`;
   } else if (S.ph === 'round') {
-    h = `<h2>Fragerunde</h2>${chips()}<div class="card"><div class="row"><span>Zeit</span><b id="tm" style="font-size:2rem"></b></div></div><div class="card"><div class="q">${esc(S.q)}</div>${S.a ? `<div class="a">${esc(S.a)}${host && !S.show ? ' (nur du siehst das)' : ''}</div>` : ''}</div>${host ? btn('rv', 'Antwort für alle zeigen', 'alt') + btn('nx', 'Nächste Frage') + btn('tv', 'Jetzt abstimmen', 'alt') : '<p>Antwortet laut im Call. Der Moderator geht durch die Fragen.</p>'}`;
+    h = `<h2>Fragerunde</h2>${chips()}${askedCard()}<div class="card"><div class="row"><span>Zeit</span><b id="tm" style="font-size:2rem"></b></div></div><div class="card"><div class="q">${esc(S.q)}</div>${S.a ? `<div class="a">${esc(S.a)}${host && !S.show ? ' (nur du siehst das)' : ''}</div>` : ''}</div>${host ? btn('rv', 'Antwort für alle zeigen', 'alt') + btn('nx', 'Nächste Frage') + btn('tv', 'Jetzt abstimmen', 'alt') : '<p>Nur wer dran ist, antwortet laut im Call. Der Moderator geht durch die Fragen.</p>'}`;
   } else if (S.ph === 'vote') {
-    const waiting = S.players.filter(p => p.h > 0 && p.on && !p.voted).map(p => esc(p.name)).join(', ');
-    h = `<h2>Abstimmung</h2>${chips()}` + (me.h > 0 ? (S.myVote ? `<div class="card"><p>Deine Stimme ist abgegeben. Es fehlen noch: ${waiting || 'niemand'}</p></div>` : '<div class="card"><p>Wer war gerade der Dümmste? Geheim.</p></div>' + others.map(p => `<button data-v="${p.id}">${esc(p.name)}</button>`).join('')) : '<p>Du bist raus und schaust zu.</p>');
+    const waiting = S.players.filter(p => p.h > 0 && p.on && !p.voted && p.id !== S.host).map(p => esc(p.name)).join(', ');
+    h = `<h2>Abstimmung</h2>${chips()}` + (!host && me.h > 0 ? (S.myVote ? `<div class="card"><p>Deine Stimme ist abgegeben. Es fehlen noch: ${waiting || 'niemand'}</p></div>` : '<div class="card"><p>Wer war gerade der Dümmste? Geheim.</p></div>' + others.map(p => `<button data-v="${p.id}">${esc(p.name)}</button>`).join('')) : '<p>' + (host ? 'Du moderierst und stimmst nicht ab.' : 'Du bist raus und schaust zu.') + '</p>');
   } else if (S.ph === 'result') {
     const r = S.res;
     h = `<h2>Ergebnis</h2><div class="card">${S.players.filter(p => r.counts[p.id] !== undefined).map(p => `<div class="row"><span>${esc(p.name)}</span><span>${r.counts[p.id]} Stimmen</span></div>`).join('')}</div><div class="card"><div class="big">${esc(r.loser)} verliert ein Herz</div><p style="text-align:center">${r.tie ? 'Gleichstand, der Zufall hat entschieden. ' : ''}${r.out ? 'Ausgeschieden: Der Dümmste fliegt!' : ''}</p></div>${chips()}${host ? btn('ct', 'Weiter') : ''}`;
   } else if (S.ph === 'finale') {
-    const f = S.fin, ex = f.n >= 10;
-    h = `<h2>Finale</h2><div class="card"><div class="row"><span>${esc(f.pl[0].name)}</span><b style="font-size:2rem">${f.s[0]} : ${f.s[1]}</b><span>${esc(f.pl[1].name)}</span></div><p>${ex ? 'Stechen: Wer vorne liegt, gewinnt' : 'Frage ' + (f.n + 1) + ' von 10'}</p></div><div class="card"><div class="q">${esc(S.q)}</div>${S.a ? `<div class="a">${esc(S.a)}</div>` : ''}</div>` +
-      (host ? (S.show ? `<p>Wer hat richtig geantwortet?</p>${btn('j0', esc(f.pl[0].name))}${btn('j1', esc(f.pl[1].name))}${btn('jn', 'Keiner', 'alt')}` : btn('rv', 'Antwort zeigen')) : '<p>Beantwortet laut im Call. Der Moderator bewertet.</p>');
+    const f = S.fin, pn = f.pl[f.turn].name;
+    if (f.wait) {
+      h = `<h2>Finale</h2><div class="card"><div class="big">${esc(f.pl[0].name)} ist fertig</div><p style="text-align:center">Als Nächstes: ${esc(f.pl[1].name)}</p></div>` + (host ? btn('ct', 'Nächster Spieler startet') : '<p>Warte auf den Moderator.</p>');
+    } else {
+      h = `<h2>Finale: ${esc(pn)} ist dran</h2><div class="card"><div class="row"><span>${f.len === 1 ? 'Stechen' : 'Frage ' + (f.n + 1) + ' von ' + f.len}</span>${host ? `<span>${esc(f.pl[0].name)} ${f.s[0]} | ${esc(f.pl[1].name)} ${f.s[1]}</span>` : ''}</div></div><div class="card"><div class="q">${S.q === null ? 'Du bist gleich dran. Bitte jetzt nicht zuhören (Ton aus)!' : esc(S.q)}</div>${S.a ? `<div class="a">${esc(S.a)} (nur du siehst das)</div>` : ''}</div>` +
+        (host ? `<p>Hat ${esc(pn)} richtig geantwortet?</p>${btn('jr', 'Richtig')}${btn('jf', 'Falsch', 'alt')}` : '<p>Antwort laut im Call. Die Punkte kennt nur der Moderator.</p>');
+    }
+  } else if (S.ph === 'done') {
+    h = host ? `<h2>Beide fertig</h2><div class="card"><div class="row"><span>${esc(S.fin.pl[0].name)}</span><b>${S.fin.s[0]}</b></div><div class="row"><span>${esc(S.fin.pl[1].name)}</span><b>${S.fin.s[1]}</b></div></div>${btn('rz', 'Ergebnis für alle auflösen')}` : '<h2>Finale vorbei</h2><div class="card"><div class="big">Der Moderator löst gleich auf …</div></div>';
+  } else if (S.ph === 'tie') {
+    h = `<h2>Gleichstand!</h2><div class="card"><div class="big">${S.fin.s[0]} : ${S.fin.s[1]}</div></div>` + (host ? btn('tb', 'Stechen: je 1 Frage') : '<p>Der Moderator startet das Stechen.</p>');
   } else if (S.ph === 'end') {
-    h = `<h1>Gewonnen!</h1><div class="card"><div class="big">${esc(S.winner)}</div><p style="text-align:center">ist nicht der Dümmste.</p></div>${host ? btn('rs', 'Nochmal spielen') : ''}`;
+    h = `<h1>Gewonnen!</h1><div class="card"><div class="big">${esc(S.winner)}</div><p style="text-align:center">ist nicht der Dümmste.</p></div>${S.fin && S.fin.s ? '<p style="text-align:center">Endstand: ' + esc(S.fin.pl[0].name) + ' ' + S.fin.s[0] + ' : ' + S.fin.s[1] + ' ' + esc(S.fin.pl[1].name) + '</p>' : ''}${host ? btn('rs', 'Nochmal spielen') : ''}`;
   }
   $.innerHTML = h;
   act('st', 'start'); act('rv', 'reveal'); act('nx', 'next'); act('tv', 'toVote'); act('ct', 'cont'); act('rs', 'restart');
-  on('j0', () => send({ t: 'judge', w: 0 })); on('j1', () => send({ t: 'judge', w: 1 })); on('jn', () => send({ t: 'judge', w: -1 }));
+  act('rz', 'resolve'); act('tb', 'tiebreak'); on('jr', () => send({ t: 'judge', w: 1 })); on('jf', () => send({ t: 'judge', w: 0 }));
   document.querySelectorAll('[data-v]').forEach(b => b.onclick = () => send({ t: 'vote', target: b.dataset.v }));
   const tm = document.getElementById('tm');
   if (tm && S.endsAt) { const f = () => tm.textContent = Math.max(0, Math.ceil((S.endsAt - Date.now()) / 1000)) + ' s'; f(); tick = setInterval(f, 500); }
